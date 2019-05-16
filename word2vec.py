@@ -1,5 +1,6 @@
 import logging
 
+import numpy
 from gensim.models import Word2Vec, KeyedVectors
 from gensim.test.utils import get_tmpfile
 from nltk.corpus import stopwords
@@ -17,6 +18,27 @@ class LemmTextIterator:
         for i, row in self.data.iterrows():
             doc = [word for word in row['lemm_text'].split() if word not in self.stop_words]
             yield doc
+
+
+# todo: Обратить внимание на этот метод. Он нигде не используется пока что, но он важен
+# Берём массив слов, находим средний вектор всех векторов слов этого массива
+# TODO: Протестировать этот метод, проверить, что он работает корректно, а то спать хочетсо
+def mean_vector(words, stop_words, wv, ):
+    # todo: в будушем - стереть принты
+    print(len(words))
+    words = [word for word in words if word not in stop_words]
+    print(len(words))
+    num_vectors = len(words)
+    vector_size = len(wv[words[0]])
+    mean = numpy.zeros(vector_size)
+
+    for word in words:
+        vector = wv[word]
+        for i in range(vector_size):
+            mean[i] += vector[i]
+    for i in range(vector_size):
+        mean[i] /= num_vectors
+    return mean
 
 
 def train_model(save_full_model=False, save_word_vectors=True):
@@ -51,6 +73,7 @@ def load_word_vectors(path="wordvectors.kv"):
     wv = KeyedVectors.load(path, mmap='r')
     return wv
 
+
 # Тренируем k-means на векторах wv
 def train_kmeans(wv, save=True):
     kmeans = cluster.KMeans(n_clusters=50, n_init=20)
@@ -84,6 +107,8 @@ def load_kmeans(filename='model.sav'):
 По заданной k-means модели и векторному представлению слов записывает в файл по
 n_words самых близких к центру кластера слов
 '''
+
+
 def write_clusters_to_file(kmeans_model, wv, n_words=20):
     centroids = kmeans_model.cluster_centers_
     with open("{}_clusters_top_{}.txt".format(kmeans_model.n_clusters, n_words),

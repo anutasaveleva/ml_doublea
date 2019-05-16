@@ -154,8 +154,10 @@ def get_recommendations(stop_words, wv):
     pandas.set_option('display.max_colwidth', -1)
     with open('word2vec_recommendations.txt', mode='w+') as output:
         for index in indices:
-            output.write(f"{cosines[index]}\n"
-                         f"{song_data[['artist', 'song', 'text']].iloc[index].to_string()}\n")
+            output.write(f"{cosines[index]}\n{song_data[['artist', 'song']].iloc[index].to_string()}\n")
+            text = song_data['text'].iloc[index].replace(r'\n', '\n')
+            output.write(f"{text}\n")
+            output.write((('*' * 50) + '\n') * 3)
 
 
 def main():

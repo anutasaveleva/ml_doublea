@@ -1,12 +1,16 @@
 import logging
+import math
 
 import numpy
+import pandas
 from gensim.models import Word2Vec, KeyedVectors
 from gensim.test.utils import get_tmpfile
 from nltk.corpus import stopwords
 from pandas import read_csv
 from sklearn import cluster
 from sklearn.externals import joblib
+
+from recommendations import multiply_scalar
 
 
 class LemmTextIterator:
@@ -20,14 +24,9 @@ class LemmTextIterator:
             yield doc
 
 
-# todo: Обратить внимание на этот метод. Он нигде не используется пока что, но он важен
 # Берём массив слов, находим средний вектор всех векторов слов этого массива
-# TODO: Протестировать этот метод, проверить, что он работает корректно, а то спать хочетсо
-def mean_vector(words, stop_words, wv, ):
-    # todo: в будушем - стереть принты
-    print(len(words))
-    words = [word for word in words if word not in stop_words]
-    print(len(words))
+def song_vector(words, stop_words, wv, ):
+    words = [word for word in words if word not in stop_words and word in wv.vocab]
     num_vectors = len(words)
     vector_size = len(wv[words[0]])
     mean = numpy.zeros(vector_size)
@@ -121,6 +120,44 @@ def write_clusters_to_file(kmeans_model, wv, n_words=20):
             out.write('\n')
 
 
+def update_data_set(stop_words, wv, ):
+    data = read_csv('out.csv')
+    song_vectors = []
+    for i, row in data.iterrows():
+        lemm_text = row['lemm_text']
+        song_vectors.append(song_vector(lemm_text.split(), stop_words, wv))
+    data['song_vector'] = song_vectors
+    columns = ['artist', 'song', 'link', 'text', 'lemm_text']
+
+    for column in columns:
+        del data[column]
+    data.to_csv('song_vectors.csv', encoding='utf-8')
+
+
+def get_recommendations(stop_words, wv):
+    song_data = read_csv('out.csv')
+    words = input('Введите ключевые слова песни\n').split()
+    input_vector = song_vector(words, stop_words, wv)
+    inv_length = 1 / math.sqrt(sum([i ** 2 for i in input_vector]))
+    input_normalized = input_vector * inv_length
+    data = read_csv('song_vectors.csv')
+    cosines = []
+    for i, row in data.iterrows():
+        lyrics_vector = numpy.array(row['song_vector'].replace('[', '')
+                                    .replace(']', '').split(),
+                                    dtype=numpy.float64)
+        if len(lyrics_vector) != 0:
+            inv_length = 1 / math.sqrt(sum([i ** 2 for i in lyrics_vector]))
+        lyrics_normalized = lyrics_vector * inv_length
+        cosines.append(multiply_scalar(input_normalized, lyrics_normalized))
+    indices = sorted(range(len(cosines)), key=lambda i: cosines[i], reverse=True)[:10]
+    pandas.set_option('display.max_colwidth', -1)
+    with open('word2vec_recommendations.txt', mode='w+') as output:
+        for index in indices:
+            output.write(f"{cosines[index]}\n"
+                         f"{song_data[['artist', 'song', 'text']].iloc[index].to_string()}\n")
+
+
 def main():
     # Тренировка модели, можно натренировать 1 раз и закомментить
     # train_model()
@@ -134,7 +171,12 @@ def main():
     # Загрузка предтренированной модели kmeans
     loaded_kmeans = load_kmeans()
 
-    write_clusters_to_file(loaded_kmeans, wv)
+    stop_words = stopwords.words('english')
+
+    # update_data_set(stop_words, wv)
+    get_recommendations(stop_words, wv)
+    # Запись ключевых слов кластера в файл
+    # write_clusters_to_file(loaded_kmeans, wv)
 
 
 if __name__ == '__main__':
